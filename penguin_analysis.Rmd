@@ -1,0 +1,406 @@
+---
+title: "Penguin Analysis"
+author: "Kapaeloa Aki"
+output: html_document
+---
+```{r setup, include=FALSE, warning=FALSE, message=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(dplyr)
+library(lubridate)
+library(ggpubr)
+library(car)
+```
+
+
+---
+
+## Importing Dataset
+
+Link: https://www.kaggle.com/datasets/parulpandey/palmer-archipelago-antarctica-penguin-data
+
+This dataset was found from Kaggle and collected by Dr. Kristen Gorman and the Palmer Station LTER.  The dataset contains information about various penguins. This includes data on species, island, life stage, culmen, flipper, mass, gender, and biological markers.
+
+**Variables:**
+
+- species: penguin species (Chinstrap, Adélie, or Gentoo)
+
+- culmen_length_mm: culmen length (mm)
+
+- culmen_depth_mm: culmen depth (mm)
+
+- flipper_length_mm: flipper length (mm)
+
+- body_mass_g: body mass (g)
+
+- island: island name (Dream, Torgersen, or Biscoe) in the Palmer - Archipelago (Antarctica)
+
+- sex: penguin sex
+
+```{r, warning = FALSE}
+
+penguin <- read_csv("penguins_lter.csv")
+
+str(penguin)
+
+```
+---
+
+## Data Cleaning and Wrangling
+
+Here the comments column is removed as they contain too many empty rows and do not contribute much to the data.  Additionally, the rows that contain NA values are removed.
+```{r}
+
+penguin <- penguin %>% select(-Comments)
+
+penguin <- na.omit(penguin)
+
+```
+
+The variables are renamed and for consistency.
+```{r}
+
+penguin <- rename(penguin, 
+                  species = Species, 
+                  region = Region,
+                  island = Island,
+                  stage = Stage,
+                  clutch = 'Clutch Completion',
+                  egg_date = 'Date Egg',
+                  culmen_length = 'Culmen Length (mm)',
+                  culmen_depth = 'Culmen Depth (mm)',
+                  flipper_length = 'Flipper Length (mm)',
+                  mass = 'Body Mass (g)',
+                  sex = Sex,
+                  delta15 = 'Delta 15 N (o/oo)',
+                  delta13 = 'Delta 13 C (o/oo)')
+
+```
+
+
+Here the categorical variables are converted into factors, and the dates are stored in date format.  A new column 'year' is also created from the **egg_date** column.
+```{r}
+
+penguin <- penguin %>%
+  mutate(
+    species = as.factor(species),
+    sex = as.factor(sex),
+    island = as.factor(island),
+    region = as.factor(region),
+    stage = as.factor(stage),
+    clutch = as.factor(clutch),
+    egg_date = mdy(egg_date),
+    egg_year = year(egg_date)
+  )
+
+str(penguin)
+```
+
+
+---
+
+## Distributions and Summary Statistics
+
+```{r}
+summary(penguin)
+```
+
+
+Here is a histogram of the **culmen_length** feature across species.
+```{r}
+ggplot(penguin, aes(x = culmen_length)) +
+  geom_histogram(aes(y = after_stat(density)),binwidth = 1, color = "black", fill = "darkseagreen4") +
+  facet_wrap(~ species, ncol = 1) +  
+  labs(x="Culmen Length", y="Density", title="Histogram of Culmen Length across Species") +
+  geom_density() +
+  theme_bw()
+    
+```
+
+This histogram shows that *Chinstrap* have a slightly higher *culmen length*, closely followed by *Gentoo*, and then *Adelie*.  *Chinstrap* and *Gentoo* both have a bimodal distribution, which means there are two main different beak sizes.
+
+
+Here the mean, median, and mode body mass of the three penguin species are found.
+
+Mode was found with assistance from these two websites:
+https://www.tutorialspoint.com/r/r_mean_median_mode.htm
+https://stackoverflow.com/questions/2547402/how-to-find-the-statistical-mode
+```{r}
+
+Modes <- function(x) #Define Modes
+  {
+  ux <- unique(x) #Obtain unique values 
+  tab <- tabulate(match(x, ux)) #Count each unique value in x
+  ux[tab == max(tab)] #Look at the values with the highest data
+    return(ux[which.max(tab)]) #Return the highest values 
+
+  }
+
+penguin %>% 
+  group_by(species) %>%
+  summarize(
+    mean_mass = mean(mass, na.rm = TRUE),
+    median_mass = median(mass, na.rm = TRUE),
+    mode_mass = Modes(mass)
+)
+
+
+```
+
+From the data above, it is observed that the *Gentoo* Penguins have the highest mean and median body mass, whereas the *Adelie* Penguin has the lowest.
+
+
+
+Here is a boxplot to visualize the distribution of body mass by the species of the penguins.
+[Link to wrap text](https://www.geeksforgeeks.org/wrap-legend-text-in-ggplot2-in-r/)
+```{r}
+ggplot(penguin, aes(x = species, y = mass)) +
+  labs(x = 'Penguin Species', y = 'Body Mass (g)', title = 'Boxplot of Body Mass Distribution by Species') +
+  geom_boxplot(fill = "darkseagreen4") +
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 10)) + 
+  theme_bw()
+
+```
+
+The box-plot shows that *Gentoo* have a higher body mass, and *Adelie* having the lowest body mass.  
+
+
+Here is a box-plot to visualize the distribution of body mass by island.
+```{r}
+ggplot(penguin, aes(x = island, y = mass)) + 
+  geom_boxplot(fill = "darkseagreen4") + 
+  labs(x = "Island", y = "Body Mass (g)", title = "Boxplot of Body Mass Distribution by Island") +
+  theme_bw()
+
+```
+
+This visualization shows that heavier penguins reside in *Biscoe*, with the lightest penguins being observed in *Torgersen*.
+
+
+---
+
+## Developing Questions and Making Visualizations
+
+
+### Is there a relationship between culmen length and flipper length?
+```{r}
+
+ggplot(penguin, aes(x = culmen_length, y = flipper_length, color = species))+ 
+  geom_point() + 
+  labs(x = "Culmen Length (mm)", y = "Flipper Length (mm)",title="Relationship between culmen length and flipper length") +
+  scale_color_manual(values = c('darkseagreen4', 'darkorchid4', 'firebrick4')) + 
+  theme_bw()
+
+```
+
+This visualization shows a positive relationship between *culmen length* and *flipper length*.  It is also indicated that culmen and flipper length differ between species, as they are grouped together.
+
+
+### What species had the most eggs each year?
+
+```{r}
+ggplot(penguin, aes(x = egg_year, fill = species)) +  
+  geom_bar() +  
+  labs(x = "Year", y = "Count", fill = "Species") +
+  scale_fill_manual(values = c('darkseagreen4', 'darkorchid4', 'firebrick4')) +
+  theme_bw()
+```
+
+From the graph, the *Adelie* and *Gentoo* penguins had the most eggs, followed by the *Chinstrap* penguins.
+
+
+### What is the relationship between clutch completion and body mass across species?
+
+```{r}
+
+ggplot(penguin, aes(x = clutch, y = mass, fill = species)) +
+  geom_boxplot() +
+  labs(x = "Clutch", y = "Body Mass (g)", title = "Body Mass Distribution by Clutch and Species") +
+  scale_fill_manual(values = c('darkseagreen4', 'darkorchid3', 'firebrick3')) +
+  theme_bw()
+
+```
+
+Clutch completion indicates if the penguin was able to successfully lay their eggs.
+
+This box plot tells us that penguins that have completed their clutch tend to have a slightly higher body mass.
+
+
+### How does culmen length relate to species position on the food chain?
+
+```{r}
+
+ggplot(penguin, aes(x = culmen_length, y = delta15, color = species))+ 
+  geom_point() + 
+  labs(x = "Culmen Length (mm)", y = "Delta 15 N",title="Relationship between culmen length and Delta 15") +
+  scale_color_manual(values = c('darkseagreen4', 'darkorchid4', 'firebrick4')) +
+  theme_bw()
+
+```
+
+*Delta 15 N* represents the penguin's position in the food chain
+
+- higher values suggest a bigger diet, which is a higher position in the food chain
+
+This graph indicates that species have a wide spread, suggesting a sort of varied diet among the penguins.  *Gentoo* and *Chinstrap* penguins seem to show a weak positive correlation, which may indicate that a larger beak tend to have food higher up on the food chain.
+
+
+### What habitat do the species feed in?  How does this correlate to species position on the food chain? 
+
+```{r}
+
+ggplot(penguin, aes(x = delta13, y = delta15, color = species))+ 
+  geom_point() + 
+  labs(x = "Delta 13 C", y = "Delta 15 N",title="Relationship between Delta 13 and Delta 15") +
+  scale_color_manual(values = c('darkseagreen4', 'darkorchid4', 'firebrick4')) +
+  theme_bw()
+
+```
+
+*Delta 13 C* is a biological marker that helps indicate the penguin's feeding habit
+
+ - higher values suggest feeding in deeper waters
+ 
+ - lower values suggest feeding in more coastal waters.
+
+
+This visualization tells us that there is a somewhat positive relationship between a penguin's feeding habit and their feeding habitat.  It also tells us that *Chinstrap* penguins mostly feeds in deeper waters, while *Gentoo* penguins in coastal waters. 
+
+
+
+---
+
+
+# **Hypothesis Testing - Comparisons**  
+  
+# Question 1) Is there a difference in flipper length across the islands?
+
+## Check if Normally Distributed
+```{r}
+shapiro.test(penguin$flipper_length)
+```
+  Due to the p-value being below 0.05, the null hypothesis is rejected, and assume that the data is not normally distributed
+  
+  
+```{r}
+ggqqplot(penguin$flipper_length)
+
+ggdensity(penguin$flipper_length)
+```
+  
+  Due to many data points deviating from the reference line, we can further conclude that it is not normally distributed.  The density graph also informs us that the data is bimodal, which again indicates a non-normal distribution.
+
+
+## Check for equal variance
+Perform Levene's Test
+```{r}
+leveneTest(flipper_length ~ island, penguin)
+```
+  The p-value being less than 0.05 indicates that the null hypothesis is rejected.  Therefore, the data has unequal variances.
+
+
+## Perform Kruskal-Wallis Test
+```{r}
+kruskal_result <- kruskal.test(flipper_length ~ island, penguin)
+kruskal_result
+```
+  I decided to run a Kruskal Wallis Test because the data was not normally distributed and there were more than two categorical groups to consider.  The result tells us that there is a great difference among the group medians.  A p-value less than 0.05 signifies that we reject the null hypothesis, thus suggesting that there is a statistically significant difference in the medians among at least one of the groups.
+  
+  
+## Perform pairwise wilcox test
+```{r}
+pairwise.wilcox.test(penguin$flipper_length,
+               penguin$island,
+               p.adjust.method="bonferroni")
+```
+  I performed a Pairwise Wilcox test because I wanted to identify which pairs had the signficant difference that was found through the Kruskal-Wallis test.  Between the islands of Biscoe and Dream there is a signficant different in flipper length between the two islands.  There is also signficant difference between Biscoe and Torgersen.  There is no signficant difference in flipper length between Dream and Torgersen.
+  
+
+## Visualize
+```{r}
+kruskal_p_value <- kruskal_result$p.value  
+
+ggplot(penguin, aes(x = island, y = flipper_length)) + 
+  stat_summary(fun = median, geom = "bar", 
+               fill = c("#FF9999", "#99CCFF", "#99FF99")) +  
+stat_summary(fun.data = function(y) {
+  data.frame(
+    y = median(y), 
+    ymin = quantile(y, 0.25),  
+    ymax = quantile(y, 0.75)  
+  )
+}, geom = "errorbar", width = 0.2) +
+  theme_minimal() +
+  labs(title = "Barplot of Island by Flipper Length", 
+       x = "Island", y = "Flipper Length",
+       subtitle = paste("Kruskal-Wallis p-value:", 
+                        round(kruskal_p_value,6))) +
+   stat_compare_means(
+    comparisons = list(c("Biscoe", "Dream"), 
+                       c("Dream", "Torgersen"), 
+                       c("Biscoe", "Torgersen")), 
+    method = "wilcox.test", 
+    label = "p.signif", 
+    size = 3)
+```
+
+This barplot illustrates the difference between the medians of the 3 islands according to flipper length.  We can see that there is no significant difference between Dream and Torgersen. While the Biscoe-Torgersen and Biscoe-Dream comparisons show a significant difference.  We can also see that Dream and Torgersen have roughly the same amount of values, while Biscoe is mugh higher.
+
+
+
+
+
+  
+# Question 2) Is there a difference in culmen length for the different clutch completions?
+
+## Check if Normally Distributed
+```{r}
+shapiro.test(penguin$culmen_length)
+```
+  Due to the p-value being below 0.05, we reject the null hypothesis, and assume that the data is not normally distributed
+  
+  
+```{r}
+ggqqplot(penguin$culmen_length)
+
+ggdensity(penguin$culmen_length)
+```
+  
+  Due to many data points deviating from the reference line and the bimodal distribution, we can further conclude that it is not normally distributed.
+
+## Check for equal variance
+
+Perform Levene's Test
+```{r}
+leveneTest(culmen_length ~ clutch, penguin)
+```
+  The p-value being above than 0.05 indicates that we fail reject the null hypothesis.  Therefore, the data has no unequal variances.
+
+
+
+## Perform Kruskal-Wallis Test
+```{r}
+kruskal.test(culmen_length ~ clutch, penguin)
+
+```
+  Due to there not being a normal distribution and only two categorical groups to consider I ran a kruskal-wallis test.  A p-value more than 0.05 signifies that we fail to reject the null hypothesis, thus suggesting that there is no statistically significant difference in the medians among the two groups.
+
+
+  
+
+## Visualize
+```{r}
+ggplot(penguin, aes(x = clutch, y = culmen_length, fill = clutch)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of Culmen Length by Clutch Completion",
+       subtitle = "Wilcox Rank-Sum Test Result",
+       x = "Clutch Completion", y = "Culmen Length") +
+  stat_compare_means(method = "wilcox.test", label = "p.signif", size = 3)
+  
+
+```
+
+  This boxplot illustrates how there is not a significant difference in culmen length according to the clutch completions.
+
+
+
